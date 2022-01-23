@@ -26,9 +26,9 @@ class Scraper:
     def start(self):
         self.driver = webdriver.Firefox(self.option)
 
-    def get_page_by_url(self, url, time=5):
+    def get_page_by_url(self, url, wait_for=5):
         self.driver.get(url)
-        time.sleep(time)
+        time.sleep(wait_for)
 
 
     def download_img_file(self, src_url, fpath):

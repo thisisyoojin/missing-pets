@@ -1,6 +1,6 @@
 import os
 import time
-from scraper import Scraper
+from base.scraper import Scraper
 
 class UrlScraper(Scraper):
     """
@@ -17,7 +17,7 @@ class UrlScraper(Scraper):
 
     def __init__(self, ROOT_DOMAIN, fpaths, option=None):
         super().__init__(ROOT_DOMAIN, option)
-        fpaths['prev'], fpaths['cur'] = self.prev_fpath, self.cur_fpath
+        self.prev_fpath, self.cur_fpath = fpaths['prev'], fpaths['cur']
 
     
     def read_urls(self, fpath):
@@ -30,7 +30,7 @@ class UrlScraper(Scraper):
 
 
     def write_urls(self, data, fpath):
-        with open(fpath, type) as f:
+        with open(fpath, 'a') as f:
             f.write(data)
         time.sleep(2)
 
@@ -55,19 +55,18 @@ class UrlScraperWithNext(UrlScraper):
     anchor_xpath(string):
     """
 
-    def __init__(self, ROOT_DOMAIN, option=None, next_xpath='', items_xpath='', anchor_xpath=''):
-        super().__init__(ROOT_DOMAIN, option)
+    def __init__(self, ROOT_DOMAIN, fpaths, option=None, next_xpath='', items_xpath=''):
+        super().__init__(ROOT_DOMAIN, fpaths, option)
         self.urls = []
         self.next_xpath = next_xpath
         self.items_xpath = items_xpath
-        self.anchor_xpath = anchor_xpath
 
 
     def get_urls_in_current_page(self):
         urls = []
         items = self.driver.find_elements_by_xpath(self.items_xpath)
         for itm in items:
-            url = itm.find_element_by_xpath(self.anchor_xpath).get_attribute('href')
+            url = itm.find_element_by_xpath('.//a').get_attribute('href')
             urls.append(url)
         return urls
 
@@ -94,9 +93,8 @@ class UrlScraperWithNext(UrlScraper):
         while next:
             self.get_page_by_url(current_page)
             cur_urls = self.get_urls_in_current_page()
-            self.urls.extend(cur_urls)
             
-            next = self.get_next_page(current_page)
+            next = self.get_next(current_page)
             current_page = next
             self.write_urls('\n'+'\n'.join(cur_urls), self.cur_fpath)
 
