@@ -1,22 +1,46 @@
-from scraper import Scraper
+import os
 import time
+from scraper import Scraper
 
 class UrlScraper(Scraper):
     """
     Base url scraper
+    
+    Init params
+    ROOT_DOMAIN
+    fpaths(Required) -> dict: dictionary including keys with prev, cur. Values are file paths.
 
     Method
-    read_urls(): read urls from database
-    get_new_urls(): compare between database and current crawled urls. get only new urls to pass to page_scrapers.
+    read_urls(fpath): read urls from file
+    extract_new_urls(prev_fpath, cur_fpath): compare between database and current crawled urls. get only new urls to pass to page_scrapers.
     """
-    def __init__(ROOT_DOMAIN, option=None):
+
+    def __init__(self, ROOT_DOMAIN, fpaths, option=None):
         super().__init__(ROOT_DOMAIN, option)
+        fpaths['prev'], fpaths['cur'] = self.prev_fpath, self.cur_fpath
 
-    def read_urls():
-        pass
+    
+    def read_urls(self, fpath):
+        if os.path.isfile(fpath):
+            with open(fpath, 'r') as f:
+                urls = f.readlines()
+        else:
+            urls = []
+        return urls
 
-    def get_new_urls():
-        pass
+
+    def write_urls(self, data, fpath):
+        with open(fpath, type) as f:
+            f.write(data)
+        time.sleep(2)
+
+
+    def extract_new_urls(self):
+        set_prev = set(self.read_urls(self.prev_fpath))
+        set_cur = set(self.read_urls(self.cur_fpath))
+        os.rename(self.cur_fpath, self.prev_fpath)
+        return set_cur.difference(set_prev)
+
 
 
 class UrlScraperWithNext(UrlScraper):
@@ -60,10 +84,11 @@ class UrlScraperWithNext(UrlScraper):
             return None
 
 
-    def get_all_urls_to_file(self, fpath):
+    def get_all_urls(self):
         
         self.start()
         current_page = self.ROOT_DOMAIN
+
         next = True
         
         while next:
@@ -73,7 +98,7 @@ class UrlScraperWithNext(UrlScraper):
             
             next = self.get_next_page(current_page)
             current_page = next
-            self.write_to_text('\n'+'\n'.join(cur_urls), fpath)
+            self.write_urls('\n'+'\n'.join(cur_urls), self.cur_fpath)
 
         self.close()
         print('Finished getting urls.')
@@ -85,43 +110,46 @@ class UrlScraperWithScroll(UrlScraper):
     Scraping all urls through all pages
     """
 
-    def __init__(self, ROOT_DOMAIN):
+    def __init__(self, ROOT_DOMAIN, item_xpath='', xpath_from_last_id=''):
         super().__init__(ROOT_DOMAIN)
+        self.item_xpath = item_xpath
+        self.xpath_from_last_id = xpath_from_last_id
 
-    def find_next_items_with_xpath():
+    
+    def find_next_items(self, item_xpath, xpath_from_last_id, last_id):
         """
         should return xpath
         """
-        raise NotImplementedError("please implement locat_next_item function")
+        if last_id:
+            # e.g.f"//div[@id='{last_id}']//following-sibling::div[contains(@id, 'gi-')]"
+            xpath = xpath_from_last_id
+        else:
+            # e.g. "//div[contains(@id, 'gi-')]"
+            xpath = item_xpath
+        
+        return self.driver.find_elements_by_xpath(xpath)
+    
 
 
-    def get_urls_in_current_page(self, last_id, write_to_file=True):
+    def get_urls_from_items(self, last_id):
 
-        # if last_id:
-        #     xpath = f"//div[@id='{last_id}']//following-sibling::div[contains(@id, 'gi-')]"
-        # else:
-        #     xpath = "//div[contains(@id, 'gi-')]"
-
-        # items = self.driver.find_elements_by_xpath(xpath)
-        items = self.find_next_items_with_xpath()
+        items = self.find_next_items(last_id)
         item_id = None
+        urls = []
 
         for item in items:
             item_id = item.get_attribute('id')
             suffix = item.find_element_by_xpath(".//a").get_attribute('href')
-            item_url = f"{self.ROOT_DOMAIN}{suffix}"
-            if write_to_file:
-                self.write_to_json({
-                    "id": item_id,
-                    "item_url": item_url
-                }, "./barkley/data/animal_search/lost_urls.json")
+            urls.append(f"{self.ROOT_DOMAIN}{suffix}")
+        
+        self.write_urls('\n'+'\n'.join(urls), self.cur_fpath)
         
         return item_id
 
 
     def get_all_urls(self, field):
 
-        SCROLL_PAUSE_TIME = 1
+        SCROLL_PAUSE_TIME = 2
         last_id = None
         self.start()
         self.get_page_by_url(f"{self.ROOT_DOMAIN}/search/{field}")
@@ -132,7 +160,7 @@ class UrlScraperWithScroll(UrlScraper):
 
         while True:
             # Get 30 item urls
-            last_id = self.get_30_urls(last_id)
+            last_id = self.get_urls_from_items(last_id)
             
             # Scroll down to bottom
             self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
@@ -145,47 +173,3 @@ class UrlScraperWithScroll(UrlScraper):
             if new_height == last_height:
                 break
             last_height = new_height
-
-
-    def get_info_from_page(self):
-
-        self.start()
-        self.get_page_by_url("https://www.animalsearchuk.co.uk/ALP399353")
-        
-        pet_info = {}
-        header = self.driver.find_element_by_xpath("//div[contains(@class, 'lost')]")
-        
-        titles = header.find_element_by_xpath(".//h1").text.split()
-        for th, t in zip(['status', 'species', 'name'], titles):
-            pet_info[th] = t
-
-        pet_info['id'] = header.find_element_by_xpath(".//h2").text
-        pet_info['last_seen_address'] = header.find_element_by_xpath(".//h3").text
-        pet_info['situation'] = header.find_element_by_xpath(".//h4").text.split(':')[1].strip()
-        
-        descs = header.find_elements_by_xpath(".//ul[@class='hl']/li")
-        for h, desc in zip(['colour', 'gender', 'breed', 'last_seen_date'], descs):
-            pet_info[h] = desc.text
-
-        details = self.driver.find_elements_by_xpath("//h2[contains(text(), 'Missing On')]/ancestor::div[1]/p")
-        pet_info['age'] = details[1].text
-        pet_info['description'] = details[2].text
-
-        pet_info['circumstances'] = self.driver.find_element_by_xpath("//h2[contains(text(), 'Circumstances')]/following-sibling::p").text
-        pet_info['chipped'] = self.driver.find_element_by_xpath("//img[contains(@src, 'chip')]/ancestor::div[1]/following-sibling::p").text
-        pet_info['collar'] = self.driver.find_element_by_xpath("//img[contains(@src, 'collar')]/ancestor::div[1]/following-sibling::p").text
-        pet_info['neutered'] = self.driver.find_element_by_xpath("//i[contains(@class, 'fa-venus-mars')]/ancestor::div[1]/following-sibling::p").text
-        
-        
-        img_src = self.driver.find_element_by_xpath("//div[@class='has-img']/ancestor::a[1]").get_attribute('href')
-        
-        file_name = f"{pet_info['id']}.jpg"
-        fpath = f"./barkley/data/animal_search/img/{file_name}"
-        self.download_img_file(img_src, fpath)
-        self.save_img_to_s3(fpath, f"animal_search/{file_name}")
-        pet_info['img_url'] = f"s3://barkley-imgs/animal_search/{file_name}"
-        
-        
-        query = self.create_insert_query("lost_animalsearch", pet_info)
-        conn = db.connect()
-        conn.execute(query)
