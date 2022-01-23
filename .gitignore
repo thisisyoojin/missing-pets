@@ -1,2 +1,7 @@
 env.list
 my_env
+*/__pycache__/
+data/
+*.log
+*/db_config
+.dockerignore
